@@ -1,0 +1,240 @@
+✅ AI CV Parser & Matching Assistant
+Version: 1.0
+Owner: Michael Zelinka
+Status: Draft / In Development
+Last Updated: Apr 2026
+
+1. Product Overview
+AI CV Parser & Matching Assistant is a lightweight, AI-powered tool designed to automate the initial screening of job candidates.
+It extracts structured information from CVs, analyzes candidate skills and experience, compares them with a job description (JD), and generates a concise summary and a match score.
+Its purpose is to reduce manual screening time, improve consistency in candidate evaluation, and provide quick insights for HR professionals and hiring managers.
+
+2. Problem Statement
+HR teams and recruiters spend significant time performing repetitive tasks:
+
+manually reading CVs,
+identifying key information (skills, experience, languages),
+comparing it to requirements in job descriptions,
+writing summaries for hiring managers,
+scoring candidate fit qualitatively.
+
+This process is time-consuming, inconsistent, and error-prone.
+The product aims to eliminate 60–80% of this manual workload by automating extraction, evaluation, and summarization.
+
+3. Product Goals
+✅ Primary Goals
+
+Automate CV text extraction and structuring.
+Extract job requirements from JD text.
+Generate scoring logic matching candidate ↔ role.
+Provide a concise summary suitable for hiring managers.
+Make it usable within minutes (Streamlit UI).
+
+✅ Secondary Goals
+
+Enable batch processing of multiple CVs.
+Export structured results to ATS systems.
+Generate professional PDF reports.
+
+✅ Non-Goals (not included now)
+
+Full ATS replacement
+Candidate interview automation
+CV rewriting or generative content for candidates
+
+
+4. Target Users
+✅ Primary User: HR professionals
+
+Talent Acquisition Specialists
+HR Assistants
+Recruitment Coordinators
+
+✅ Secondary User: Hiring Managers
+
+Need quick insights
+Don’t want to read full CVs
+Rely on HR for screening
+
+✅ Future User: Staffing Agencies
+
+Process dozens/hundreds of CVs daily
+Need efficient bulk screening
+
+
+5. Use Cases
+1. HR uploads a CV → gets structured data
+
+Name, email, phone
+Skills & technologies
+Work experience summary
+Languages
+Seniority indicators
+
+2. HR uploads/pastes JD → extracts requirements
+
+Required skills
+Responsibilities
+Minimum experience
+Seniority level
+
+3. System evaluates match score
+
+0–100% based on weighted logic
+Missing vs. extra skills
+Bonus indicators (certifications, languages)
+
+4. System generates candidate summary
+
+3–5 sentence overview
+Highlight key strengths
+Mention risks or missing pieces
+
+5. HR exports or shares results
+
+JSON
+PDF report
+API usage (future)
+
+
+6. Functional Requirements
+✅ 6.1 CV Parsing
+
+System must accept PDF and DOCX.
+System must extract clean text reliably.
+System must parse:
+
+Personal info
+Experience (jobs, years)
+Hard skills (tech/industry specific)
+Soft skills
+Languages
+Education (optional)
+
+
+
+✅ 6.2 JD Parsing
+
+System must accept JD as text input.
+Extract:
+
+Required skills
+Nice-to-have skills
+Seniority
+Min. experience
+Role responsibilities
+
+
+
+✅ 6.3 Matching Logic
+
+Match score 0–100%
+Must consider:
+
+Skills overlap
+Seniority level
+Years of experience
+Languages
+Missing critical skills
+
+
+Must output reasoning summary.
+
+✅ 6.4 Candidate Summary
+
+3–5 sentences
+Professional tone
+Includes:
+
+Core experience
+Key skills
+Fit assessment
+Risks
+
+
+
+✅ 6.5 Streamlit UI
+
+CV upload (drag & drop)
+JD input (textarea)
+“Analyze” button
+JSON output block
+Match score indicator
+Summary display
+Error handling
+
+✅ 6.6 API (FastAPI)
+
+/parse endpoint
+Accept multipart files + JD text
+Return JSON response
+Healthcheck endpoint /health
+
+
+7. Non-Functional Requirements
+✅ Performance
+
+Parsing time < 5 seconds
+Error rate < 2% for well-formatted CVs
+
+✅ Reliability
+
+Handle CVs 1–5 pages
+Handle JD between 2–30 paragraphs
+Must degrade gracefully on malformed files
+
+✅ Privacy / Data
+
+No storage by default in MVP
+SaaS version: encrypted storage + GDPR compliance
+
+✅ Security
+
+API key required for backend
+HTTPS when deployed
+
+
+8. Technical Architecture Overview
+Components:
+
+FastAPI backend (processing, LLM calls)
+Parser module (PDF/DOCX parsing)
+LLM logic (OpenAI)
+Streamlit UI
+Deployment (Render, Streamlit Cloud)
+
+Data Flow:
+User → Streamlit → FastAPI → CV/JD Parser → OpenAI → Structured Output → Streamlit UI
+
+
+9. Risks & Mitigation
+✅ Risk: LLM hallucinations
+Mitigation: structured outputs, controlled prompts, post-processing validation.
+✅ Risk: CV formatting inconsistency
+Mitigation: fallback regex extraction, multiple extraction passes.
+✅ Risk: HR distrust of AI results
+Mitigation: provide reasoning + transparent scoring.
+✅ Risk: API costs
+Mitigation: caching, smaller models, throttling.
+
+10. Success Metrics
+✅ MVP Metrics
+
+CV → structured JSON accuracy ≥ 80%
+JD → structured JSON accuracy ≥ 70%
+User completes screening < 30 seconds
+HR finds summary useful (qualitative feedback)
+
+✅ Product Metrics (v1.0)
+
+Reduction of HR screening time by > 50%
+Weekly active usage during internal pilot
+Conversion to SaaS conversation
+
+
+11. Milestones
+M1 — MVP: First working prototype
+M2 — MVP v1.1: Accuracy + UX improvements
+M3 — Product v1.0: Cloud deployed version
+M4 — Product v1.5: Multi-CV + ATS export
+M5 — SaaS v2.0: Authentication + billing + credits
