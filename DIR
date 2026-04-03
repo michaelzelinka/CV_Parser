@@ -1,0 +1,50 @@
+cv_parser/
+│
+├── api/                         # FastAPI backend (routing, models, config)
+│   ├── main.py                  # App entrypoint
+│   ├── routes.py                # API endpoints (/parse, /health, ...)
+│   ├── models.py                # Pydantic schemas
+│   ├── dependencies.py          # shared deps/injection
+│   └── utils.py                 # common helpers (validation etc.)
+│
+├── parser/                      # Core parsing & AI logic
+│   ├── extract_text.py          # PDF/DOCX extraction
+│   ├── llm_extractor.py         # OpenAI structured extraction functions
+│   ├── jd_parser.py             # JD analysis / structured output
+│   ├── matching.py              # Matching score logic
+│   ├── summary.py               # Candidate summary generator
+│   └── normalizers.py           # standardization of skills, formats
+│
+├── prompts/                     # All LLM prompts (for clean separation)
+│   ├── cv_extract_prompt.json
+│   ├── jd_extract_prompt.json
+│   ├── summary_prompt.txt
+│   └── scoring_prompt.txt
+│
+├── frontend/                    # Streamlit UI (MVP)
+│   ├── app.py                   # Main UI application
+│   └── assets/                  # (optional) images, css
+│
+├── services/                    # (future SaaS features)
+│   ├── storage_service.py       # S3/Blob/Local storage adapter
+│   ├── auth_service.py          # (maybeee) JWT/OAuth
+│   └── report_service.py        # PDF/Word report generation
+│
+├── tests/                       # Tests
+│   ├── test_parser.py
+│   ├── test_matching.py
+│   └── test_api.py
+│
+├── scripts/                     # Dev scripts (linting, data prep, etc.)
+│   └── run_local.sh
+│
+├── docs/                        # Documentation (architecture, diagrams)
+│   ├── architecture.png
+│   └── api_reference.md
+│
+├── .env.example                 # Environment variables sample
+├── .gitignore
+├── requirements.txt             # Dependencies
+├── Dockerfile                   # (If I want to) containerization
+├── docker-compose.yml           # (If I want to)
+└── README.md
