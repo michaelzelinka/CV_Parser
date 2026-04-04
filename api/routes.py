@@ -4,7 +4,7 @@ from parser.extract_text import extract_text_from_file
 from parser.llm_extractor import extract_structured_cv
 from parser.llm_jd import extract_structured_jd
 
-# ✅ SANITIZERS (verze 1.1 + skill normalizer)
+# Sanitizace + skill normalizer v2.0
 from parser.sanitizers import (
     normalize_experience,
     normalize_list,
@@ -13,6 +13,9 @@ from parser.sanitizers import (
     normalize_language_items,
     normalize_skill_label
 )
+
+# Embedding matching v3.0
+from parser.matching_v3 import compute_matching_v3
 
 router = APIRouter()
 
@@ -26,21 +29,18 @@ def sanitize_cv_data(data: dict) -> dict:
         "email": normalize_email(data.get("email")),
         "phone": data.get("phone"),
 
-        # years: 5, "5 let", "pět let", "2020–2025", "around 3"
         "years_experience": normalize_experience(data.get("years_experience")),
 
-        # Bilingual skill normalization (CZ→EN)
+        # technologies normalized + CZ→EN unify
         "technologies": [
             normalize_skill_label(t)
             for t in normalize_list(data.get("technologies"))
         ],
 
-        # languages can be list OR list of dicts → normalize
         "languages": normalize_language_items(data.get("languages")),
-
         "seniority": normalize_seniority(data.get("seniority")),
         "last_position": data.get("last_position"),
-        "summary": data.get("summary")
+        "summary": data.get("summary"),
     }
 
 
@@ -58,22 +58,18 @@ def sanitize_jd_data(data: dict) -> dict:
 
 
 # ---------------------------------------------------------------------
-# ✅ MAIN ENDPOINT: /parse
+# ✅ MAIN ENDPOINT /parse
 # ---------------------------------------------------------------------
 @router.post("/parse", response_model=ParsedCVResponse)
 async def parse_cv(
     file: UploadFile = File(...),
     jd: str = Form(None)
 ):
-    # ---------------------------------------
-    # ✅ Validate file
-    # ---------------------------------------
+    # Validate
     if not file:
         raise HTTPException(400, "No CV file uploaded.")
 
-    # ---------------------------------------
-    # ✅ Extract text from PDF/DOCX
-    # ---------------------------------------
+    # Extract text
     try:
         raw_text = await extract_text_from_file(file)
     except Exception as e:
@@ -82,22 +78,18 @@ async def parse_cv(
     if not raw_text or not raw_text.strip():
         raise HTTPException(422, "Unable to extract text from CV. Possibly scanned PDF.")
 
-    # ---------------------------------------
-    # ✅ Extract & sanitize CV data via LLM
-    # ---------------------------------------
+    # Extract CV via LLM
     cv_raw = await extract_structured_cv(raw_text)
     cv_clean = sanitize_cv_data(cv_raw)
 
     try:
         cv_data = CVData(**cv_clean)
     except Exception as e:
-        raise HTTPException(status_code=400, detail=f"Invalid CV data: {e}")
+        raise HTTPException(400, f"Invalid CV data: {e}")
 
-    # ---------------------------------------
-    # ✅ Extract & sanitize JD (optional)
-    # ---------------------------------------
-    jd_data = None
+    # Extract JD via LLM
     jd_clean = None
+    jd_data = None
 
     if jd:
         jd_raw = await extract_structured_jd(jd)
@@ -106,46 +98,23 @@ async def parse_cv(
         try:
             jd_data = JDData(**jd_clean)
         except Exception as e:
-            raise HTTPException(status_code=400, detail=f"Invalid JD data: {e}")
+            raise HTTPException(400, f"Invalid JD data: {e}")
 
-    # ---------------------------------------
-    # ✅ MATCHING 1.0 (simple version)
-    # ---------------------------------------
-    score = 50  # fallback neutral score
-
+    # -----------------------------------------------------------------
+    # ✅ MATCHING v3.0 — embedding-based (OpenAI embeddings)
+    # -----------------------------------------------------------------
     try:
-        score = 0
-
-        cv_skills = set(cv_clean["technologies"])
-        jd_required = set(jd_clean["required_skills"]) if jd_clean else set()
-
-        # SKILLS — 40 %
-        if jd_required:
-            overlap = len(cv_skills & jd_required) / len(jd_required)
-            score += overlap * 40
-
-        # EXPERIENCE — 30 %
-        cv_exp = cv_clean["years_experience"]
-        jd_exp = jd_clean["min_experience"] if jd_clean else None
-
-        if cv_exp and jd_exp and jd_exp > 0:
-            score += min(cv_exp / jd_exp, 1.0) * 30
-
-        # SENIORITY — 30 %
-        if jd_clean and cv_clean["seniority"] == jd_clean["seniority"]:
-            score += 30
-
-        score = int(round(min(score, 100)))
-
+        score_block = await compute_matching_v3(cv_clean, jd_clean)
+        score = score_block["score"]
     except Exception:
-        score = 50  # fallback if anything goes wrong
+        score = 50  # fallback, never break production
 
-    # ---------------------------------------
+    # -----------------------------------------------------------------
     # ✅ Final response
-    # ---------------------------------------
+    # -----------------------------------------------------------------
     return ParsedCVResponse(
         cv_data=cv_data,
         jd_data=jd_data,
         match_score=score,
-        summary=cv_clean.get("summary")
+        summary=cv_clean.get("summary"),
     )
