@@ -16,10 +16,10 @@ async def extract_text_from_file(upload):
             for page in pdf.pages:
                 page_text = page.extract_text() or ""
                 text += page_text + "\n"
-        return text
+        return text.strip()
 
     if suffix == "docx":
         doc = Document(tmp_path)
-        return "\n".join([p.text for p in doc.paragraphs])
+        return "\n".join(p.text for p in doc.paragraphs).strip()
 
     return ""
