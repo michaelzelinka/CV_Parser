@@ -42,4 +42,4 @@ async def extract_structured_cv(text: str):
         start = raw.find("{")
         end = raw.rfind("}") + 1
         return json.loads(raw[start:end])
-``
+        
