@@ -1,9 +1,8 @@
 from pydantic import BaseModel, EmailStr
-from typing import List, Optional, Dict, Any
+from typing import List, Optional
 
 
 class CVData(BaseModel):
-    """Structured data extracted from CV."""
     name: Optional[str]
     email: Optional[EmailStr]
     phone: Optional[str]
@@ -11,10 +10,10 @@ class CVData(BaseModel):
     technologies: List[str] = []
     languages: List[str] = []
     seniority: Optional[str]
+    last_position: Optional[str]
 
 
 class JDData(BaseModel):
-    """Structured data extracted from Job Description."""
     role: Optional[str]
     required_skills: List[str] = []
     nice_to_have_skills: List[str] = []
@@ -23,16 +22,7 @@ class JDData(BaseModel):
 
 
 class ParsedCVResponse(BaseModel):
-    """Final response returned by /parse endpoint."""
-    name: Optional[str]
-    email: Optional[EmailStr]
-    phone: Optional[str]
-    years_experience: Optional[float]
-    technologies: List[str] = []
-    languages: List[str] = []
-    seniority: Optional[str]
-
-    jd_data: Optional[JDData] = None
+    cv_data: CVData
+    jd_data: Optional[JDData]
     match_score: int
-
-    summary: Optional[str] = None   # Summary from LLM
+    summary: Optional[str]
