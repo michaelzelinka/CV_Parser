@@ -106,6 +106,34 @@ def normalize_list(value):
 
     return []
 
+def normalize_skill_label(skill: str) -> str:
+    """
+    Normalize CZ/EN variants of common IT skills
+    so scoring can match them properly.
+    """
+    if not skill:
+        return ""
+
+    s = skill.lower().strip()
+
+    mapping = {
+        "datová analýza": "data analysis",
+        "analýza dat": "data analysis",
+        "projektové řízení": "project management",
+        "řízení projektů": "project management",
+        "testování": "software testing",
+        "biometrická data": "biometrics",
+        "aplikace": "application support",
+        "bezpečnost": "security",
+        "it bezpečnost": "it security",
+    }
+
+    # exact match
+    if s in mapping:
+        return mapping[s]
+
+    return skill.lower()
+
 
 # ----------------------------------------------------
 # ✅ Normalize languages (including dicts)
