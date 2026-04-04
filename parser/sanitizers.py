@@ -1,14 +1,22 @@
 import re
 from datetime import datetime
 
+
 # ----------------------------------------------------
 # ✅ Normalize experience (float)
 # ----------------------------------------------------
 def normalize_experience(value):
     """
     Handles cases like:
-    5, "5", "5 years", "pět let", "2-4 years", "2020-2025",
-    "around 3", "recent graduate", "some experience"
+    - 5
+    - "5"
+    - "5 years"
+    - "pět let"
+    - "five years"
+    - "2020-2025"
+    - "2-4 years"
+    - "around 3"
+    - "recent graduate" -> None
     """
 
     if value is None:
@@ -16,23 +24,23 @@ def normalize_experience(value):
 
     text = str(value).lower().strip()
 
-    # Case 1: pure number
+    # Case 1: direct float
     try:
         return float(text)
     except:
         pass
 
-    # Case 2: year range e.g. 2020–2025
+    # Case 2: year range "2018-2023"
     match = re.match(r"(\d{4})\s*[-–]\s*(\d{4})", text)
     if match:
         y1, y2 = map(int, match.groups())
         if y2 >= y1:
             return float(y2 - y1)
 
-    # Case 3: extract number from text
-    num = re.search(r"(\d+(?:\.\d+)?)", text)
-    if num:
-        return float(num.group(1))
+    # Case 3: number inside text
+    number = re.search(r"(\d+(?:\.\d+)?)", text)
+    if number:
+        return float(number.group(1))
 
     # Case 4: Czech number words
     czech_map = {
@@ -51,7 +59,7 @@ def normalize_experience(value):
         if word in text:
             return float(num)
 
-    # Case 5: English words
+    # Case 5: English text numbers
     english_map = {
         "one": 1,
         "two": 2,
@@ -68,22 +76,77 @@ def normalize_experience(value):
         if word in text:
             return float(num)
 
-    # No extractable number
     return None
 
 
 # ----------------------------------------------------
-# ✅ Normalize list-like fields (technologies, languages)
+# ✅ Normalize list-like fields (skills, tech, etc.)
 # ----------------------------------------------------
 def normalize_list(value):
+    """
+    Accepts:
+    - None
+    - "Python, SQL, Docker"
+    - ["Python", "SQL"]
+    - "Python / SQL / Docker"
+    """
+
     if value is None:
         return []
+
     if isinstance(value, list):
-        return [str(v).strip() for v in value]
+        return [str(v).strip() for v in value if v]
+
     if isinstance(value, str):
-        return [v.strip() for v in re.split(r"[,;/•]", value) if v.strip()]
+        return [
+            v.strip()
+            for v in re.split(r"[;,/•|\n]", value)
+            if v.strip()
+        ]
 
     return []
+
+
+# ----------------------------------------------------
+# ✅ Normalize languages (including dicts)
+# ----------------------------------------------------
+def normalize_language_items(value):
+    """
+    Handles:
+    - ["English", "German"]
+    - "English, Czech"
+    - [{"language": "čeština", "level": "native"}]
+    - [{"language": "angličtina", "level": "B2"}]
+    """
+
+    if value is None:
+        return []
+
+    # Already a string
+    if isinstance(value, str):
+        return normalize_list(value)
+
+    normalized = []
+
+    if isinstance(value, list):
+        for item in value:
+
+            # Case 1: LLM returns dict
+            if isinstance(item, dict):
+                lang = item.get("language") or item.get("lang")
+                level = item.get("level")
+
+                if lang and level:
+                    normalized.append(f"{lang} ({level})")
+                elif lang:
+                    normalized.append(str(lang))
+                continue
+
+            # Case 2: plain strings
+            if isinstance(item, str):
+                normalized.append(item.strip())
+
+    return normalized
 
 
 # ----------------------------------------------------
@@ -92,26 +155,24 @@ def normalize_list(value):
 def normalize_email(value):
     if not value:
         return None
-    if "@" not in str(value):
-        return None
-    return value.strip()
+    v = str(value).strip()
+    return v if "@" in v else None
 
 
 # ----------------------------------------------------
-# ✅ Normalize seniority
+# ✅ Normalize seniority levels
 # ----------------------------------------------------
 def normalize_seniority(value):
     if not value:
         return None
 
-    v = value.lower()
+    v = str(value).lower()
 
     if "junior" in v:
         return "Junior"
-    if "mid" in v or "medior" in v or "střední" in v:
+    if "mid" in v or "střední" in v or "medior" in v:
         return "Mid"
     if "senior" in v:
         return "Senior"
-    
-    # fallback: capitalize first letter
+
     return value.strip().title()
