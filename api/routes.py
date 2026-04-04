@@ -38,6 +38,12 @@ def sanitize_cv_data(data: dict) -> dict:
         "seniority": normalize_seniority(data.get("seniority")),
         "last_position": data.get("last_position"),
 
+        
+    cv_clean["technologies"] = [
+    normalize_skill_label(t) for t in normalize_list(cv_raw.get("technologies"))
+    ]
+
+
         # summary může být None
         "summary": data.get("summary")
     }
