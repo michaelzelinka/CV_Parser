@@ -6,9 +6,6 @@ from openai import AsyncOpenAI
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 
-# -------------------------------------------------------
-# ✅ Robust JSON extractor
-# -------------------------------------------------------
 def extract_json(raw: str):
     raw = raw.replace("```json", "").replace("```", "").strip()
     match = re.search(r"\{[\s\S]*\}", raw)
@@ -17,43 +14,37 @@ def extract_json(raw: str):
     return json.loads(match.group(0))
 
 
-# -------------------------------------------------------
-# ✅ JD extractor v2.0 — intelligent HR inference
-# -------------------------------------------------------
 async def extract_structured_jd(text: str):
     prompt = f"""
-    You are an expert HR assistant that extracts structured Job Description data
-    from ANY natural text (including unstructured job ads, HR marketing text, 
-    trainee program descriptions, mixed languages CZ/EN, long paragraphs, etc.)
+    You are an expert HR assistant extracting structured Job Description data from any text,
+    including unstructured job ads and Czech/English descriptions.
 
-    Your goal is to infer ALL relevant skills, even if they are not explicitly listed,
-    but implied by the text.
+    Your job is to INFER ALL relevant technical skills even if they are not listed as bullet points.
 
     RULES:
-    - Extract all technical skills, tools, technologies, methods and software.
-    - Extract all soft skills ONLY IF clearly job-related.
-    - Identify technologies mentioned anywhere in text including:
-      programming languages, SQL, BI, SAP, testing, automation, AI, cloud, data, analysis.
-    - From context like "trainee", "graduate", "junior", infer seniority.
-    - From context like "trainee" or "graduate", min_experience must be 0–1.
-    - If JD talks about IT projects, include general IT fundamentals.
-    - If JD lists skills in text sentences (e.g. "oceníme zkušenost s…"), extract them.
-    - Output ONLY valid JSON (no commentary).
+    - Extract ALL technologies, tools, software, skills mentioned anywhere.
+    - Extract skills from narrative text like “oceníme zkušenosti s…”.
+    - Infer implicit IT skills from context (IT environment = IT fundamentals).
+    - Identify trainee/junior roles from context.
+    - Determine seniority from text (Trainee, Junior, Mid, Senior).
+    - Determine min_experience from text:
+        - Trainee, graduate → 0
+        - Junior → 0–1
+        - Others if explicit
 
-    JSON KEYS TO RETURN:
+    RETURN JSON ONLY:
     {{
-      "role": string,
-      "required_skills": array of strings,
-      "nice_to_have_skills": array of strings,
-      "seniority": one of ["Trainee", "Junior", "Mid", "Senior"],
-      "min_experience": float or null
+        "role": "...",
+        "required_skills": [...],
+        "nice_to_have_skills": [...],
+        "seniority": "...",
+        "min_experience": 0
     }}
 
-    JOB DESCRIPTION TEXT:
+    JOB DESCRIPTION:
     {text}
     """
 
-    # Create initial attempt
     response = await client.responses.create(
         model="gpt-4.1",
         input=prompt
@@ -61,17 +52,12 @@ async def extract_structured_jd(text: str):
 
     raw = response.output_text
 
-    # Try first extraction
     try:
         return extract_json(raw)
     except Exception:
-        # Fallback repair
-        fix_prompt = f"Convert the following text into valid JSON only, with the schema described earlier:\n\n{raw}"
-
+        fix_prompt = f"Convert into valid JSON only:\n\n{raw}"
         fix_response = await client.responses.create(
             model="gpt-4.1",
             input=fix_prompt
         )
-
-        fixed_raw = fix_response.output_text
-        return extract_json(fixed_raw)
+        return extract_json(fix_response.output_text)
