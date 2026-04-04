@@ -21,9 +21,16 @@ router = APIRouter()
 
 
 # ---------------------------------------------------------------------
-# ✅ Sanitize CV data
+# ✅ Sanitize CV data (RAW + NORMALIZED)
 # ---------------------------------------------------------------------
 def sanitize_cv_data(data: dict) -> dict:
+
+    # Raw skills used for UI
+    raw_skills = normalize_list(data.get("technologies"))
+
+    # Normalized skills used for scoring
+    normalized_skills = [normalize_skill_label(t) for t in raw_skills]
+
     return {
         "name": data.get("name"),
         "email": normalize_email(data.get("email")),
@@ -31,11 +38,11 @@ def sanitize_cv_data(data: dict) -> dict:
 
         "years_experience": normalize_experience(data.get("years_experience")),
 
-        # technologies normalized + CZ→EN unify
-        "technologies": [
-            normalize_skill_label(t)
-            for t in normalize_list(data.get("technologies"))
-        ],
+        # ✅ RAW technologies → UI sees these
+        "technologies": raw_skills,
+
+        # ✅ NORMALIZED technologies → scoring uses these
+        "technologies_normalized": normalized_skills,
 
         "languages": normalize_language_items(data.get("languages")),
         "seniority": normalize_seniority(data.get("seniority")),
@@ -65,11 +72,15 @@ async def parse_cv(
     file: UploadFile = File(...),
     jd: str = Form(None)
 ):
-    # Validate
+    # ---------------------------------------
+    # ✅ Validate file
+    # ---------------------------------------
     if not file:
         raise HTTPException(400, "No CV file uploaded.")
 
-    # Extract text
+    # ---------------------------------------
+    # ✅ Extract text from PDF/DOCX
+    # ---------------------------------------
     try:
         raw_text = await extract_text_from_file(file)
     except Exception as e:
@@ -78,7 +89,9 @@ async def parse_cv(
     if not raw_text or not raw_text.strip():
         raise HTTPException(422, "Unable to extract text from CV. Possibly scanned PDF.")
 
-    # Extract CV via LLM
+    # ---------------------------------------
+    # ✅ Extract & sanitize CV data via LLM
+    # ---------------------------------------
     cv_raw = await extract_structured_cv(raw_text)
     cv_clean = sanitize_cv_data(cv_raw)
 
@@ -87,9 +100,11 @@ async def parse_cv(
     except Exception as e:
         raise HTTPException(400, f"Invalid CV data: {e}")
 
-    # Extract JD via LLM
-    jd_clean = None
+    # ---------------------------------------
+    # ✅ Extract & sanitize JD (optional)
+    # ---------------------------------------
     jd_data = None
+    jd_clean = None
 
     if jd:
         jd_raw = await extract_structured_jd(jd)
@@ -100,20 +115,20 @@ async def parse_cv(
         except Exception as e:
             raise HTTPException(400, f"Invalid JD data: {e}")
 
-    # -----------------------------------------------------------------
-    # ✅ MATCHING v3.0 — embedding-based (OpenAI embeddings)
-    # -----------------------------------------------------------------
+    # ---------------------------------------
+    # ✅ MATCHING v3.0 (embedding-based)
+    # ---------------------------------------
     try:
         score_block = await compute_matching_v3(cv_clean, jd_clean)
         score = score_block["score"]
     except Exception:
-        score = 50  # fallback, never break production
+        score = 50  # fallback if AI scoring fails
 
-    # -----------------------------------------------------------------
+    # ---------------------------------------
     # ✅ Final response
-    # -----------------------------------------------------------------
+    # ---------------------------------------
     return ParsedCVResponse(
-        cv_data=cv_data,
+        cv_data=cv_data,      # UI uses RAW technologies
         jd_data=jd_data,
         match_score=score,
         summary=cv_clean.get("summary"),
