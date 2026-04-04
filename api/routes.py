@@ -14,18 +14,17 @@ from parser.sanitizers import (
     normalize_skill_label,
 )
 
-# ✅ CV validity checker
+# CV validity
 from parser.cv_validity import is_probably_cv
 
-# ✅ Matching v3 (embedding based)
-from parser.matching_v3 import compute_matching_v3
-
+# ✅ MATCHING v5
+from parser.matching_v5 import compute_matching_v5
 
 router = APIRouter()
 
 
 # =====================================================================
-# ✅ SANITIZATION HELPERS
+# ✅ CV SANITIZATION
 # =====================================================================
 def sanitize_cv_data(data: dict) -> dict:
     raw_skills = normalize_list(data.get("technologies"))
@@ -36,8 +35,8 @@ def sanitize_cv_data(data: dict) -> dict:
         "email": normalize_email(data.get("email")),
         "phone": data.get("phone"),
         "years_experience": normalize_experience(data.get("years_experience")),
-        "technologies": raw_skills,                     # RAW → UI
-        "technologies_normalized": normalized_skills,   # NORMALIZED → scoring
+        "technologies": raw_skills,                     # UI raw
+        "technologies_normalized": normalized_skills,   # scoring
         "languages": normalize_language_items(data.get("languages")),
         "seniority": normalize_seniority(data.get("seniority")),
         "last_position": data.get("last_position"),
@@ -45,6 +44,9 @@ def sanitize_cv_data(data: dict) -> dict:
     }
 
 
+# =====================================================================
+# ✅ JD SANITIZATION
+# =====================================================================
 def sanitize_jd_data(data: dict) -> dict:
     return {
         "role": data.get("role"),
@@ -56,26 +58,27 @@ def sanitize_jd_data(data: dict) -> dict:
 
 
 # =====================================================================
-# ✅ MAIN ENDPOINT: /parse
+# ✅ /parse ENDPOINT
 # =====================================================================
 @router.post("/parse", response_model=ParsedCVResponse)
 async def parse_cv(
     file: UploadFile = File(...),
     jd: str = Form(None)
 ):
+    # 1) Validate file
     if not file:
         raise HTTPException(400, "No CV file uploaded.")
 
-    # Extract text
+    # 2) Extract text
     try:
         raw_text = await extract_text_from_file(file)
     except Exception as e:
         raise HTTPException(400, f"Could not read file: {e}")
 
     if not raw_text or not raw_text.strip():
-        raise HTTPException(422, "Unable to extract text (maybe scanned PDF).")
+        raise HTTPException(422, "Unable to extract text – maybe scanned PDF.")
 
-    # Extract CV
+    # 3) Extract CV (LLM)
     cv_raw = await extract_structured_cv(raw_text)
     cv_clean = sanitize_cv_data(cv_raw)
 
@@ -84,7 +87,7 @@ async def parse_cv(
     except Exception as e:
         raise HTTPException(400, f"Invalid CV data: {e}")
 
-    # Extract JD
+    # 4) Extract JD (optional)
     jd_clean = None
     jd_data = None
 
@@ -97,26 +100,26 @@ async def parse_cv(
         except Exception as e:
             raise HTTPException(400, f"Invalid JD data: {e}")
 
-    # ✅ CV VALIDITY CHECK
+    # 5) ✅ CV VALIDITY CHECK
     if not is_probably_cv(raw_text, cv_clean):
         return ParsedCVResponse(
             cv_data=cv_data,
             jd_data=jd_data,
             match_score=0,
-            summary="⚠️ This document does not appear to be a CV (detected as non‑CV).",
+            summary="⚠️ This document does not appear to be a CV.",
             details={"reason": "non_cv_document"}
         )
 
-    # ✅ MATCHING v3.0
+    # 6) ✅ AI MATCHING v5
     try:
-        scoring = await compute_matching_v3(cv_clean, jd_clean)
+        scoring = await compute_matching_v5(cv_clean, jd_clean)
         score = scoring["score"]
         details = scoring["details"]
     except Exception as e:
         score = 50
         details = {"error": str(e)}
 
-    # Final
+    # 7) FINAL RESPONSE
     return ParsedCVResponse(
         cv_data=cv_data,
         jd_data=jd_data,
