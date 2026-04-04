@@ -179,4 +179,3 @@ async def compute_matching_v5(cv: dict, jd: dict | None):
             "seniority_score": seniority_score
         }
     }
-``
