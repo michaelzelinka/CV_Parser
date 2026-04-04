@@ -5,6 +5,7 @@ from openai import AsyncOpenAI
 
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
+
 def extract_json(raw: str):
     raw = raw.strip().replace("```json", "").replace("```", "")
     match = re.search(r"\{[\s\S]*\}", raw)
@@ -15,9 +16,9 @@ def extract_json(raw: str):
 
 async def extract_structured_jd(text: str):
     prompt = f"""
-    Extract JD data and return ONLY pure JSON.
-    Required keys:
-    role, required_skills, nice_to_have_skills, seniority, min_experience.
+    Extract Job Description structure and return ONLY valid JSON:
+    role, required_skills, nice_to_have_skills,
+    seniority, min_experience.
 
     JD text:
     {text}
@@ -25,7 +26,7 @@ async def extract_structured_jd(text: str):
 
     response = await client.responses.create(
         model="gpt-4.1",
-        messages=[{"role": "user", "content": prompt}]
+        input=prompt
     )
 
     raw = response.output_text
@@ -33,10 +34,9 @@ async def extract_structured_jd(text: str):
     try:
         return extract_json(raw)
     except:
-        fix_prompt = f"Fix this into valid JSON only: {raw}"
-
+        fix_prompt = f"Fix this into strict JSON only: {raw}"
         fix_response = await client.responses.create(
             model="gpt-4.1",
-            messages=[{"role": "user", "content": fix_prompt}]
+            input=fix_prompt
         )
         return extract_json(fix_response.output_text)
