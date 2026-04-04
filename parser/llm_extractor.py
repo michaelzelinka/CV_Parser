@@ -7,26 +7,39 @@ load_dotenv()
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 async def extract_structured_cv(text: str):
-    prompt = """
-    Extract structured CV data from the following text.
-    Return a VALID JSON object with fields:
-    - name
-    - email
-    - phone
-    - years_experience
-    - technologies (list)
-    - languages (list)
-    - seniority
-    - last_position
-    - summary (3–5 sentences)
+    prompt = f"""
+    Extract structured CV data from the following text and return ONLY valid JSON.
+    Required JSON keys:
+    name,
+    email,
+    phone,
+    years_experience,
+    technologies,
+    languages,
+    seniority,
+    last_position,
+    summary.
+
+    CV text:
+    {text}
     """
 
     response = await client.responses.create(
         model="gpt-4.1",
-        input=[
-            {"type": "input_text", "text": prompt},
-            {"type": "input_text", "text": text}
+        messages=[
+            {"role": "user", "content": prompt}
         ]
     )
 
-    return json.loads(response.output_text)
+    # response.output_text contains the assistant message text
+    raw = response.output_text
+
+    # try to load JSON
+    try:
+        return json.loads(raw)
+    except json.JSONDecodeError:
+        # fallback: attempt to extract JSON between braces
+        start = raw.find("{")
+        end = raw.rfind("}") + 1
+        return json.loads(raw[start:end])
+``
