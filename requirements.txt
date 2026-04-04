@@ -5,4 +5,4 @@ openai
 pdfplumber
 python-docx
 pydantic
-pydantic[email]
+email-validator
