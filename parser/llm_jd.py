@@ -3,70 +3,126 @@ from openai import AsyncOpenAI
 client = AsyncOpenAI()
 
 SYSTEM_PROMPT = """
-You are an expert HR analyst. 
-Your task is to extract clear, structured, universal job requirements from ANY job description.
+You are an expert HR analyst and job‑description interpreter.
 
-This MUST work for ALL job types:
-- manufacturing / warehouse / blue-collar
-- healthcare / social care
-- customer support / office admin / HR
-- finance / accounting
-- sales / marketing
-- engineering / IT / dev / data
-- managerial roles
-- junior / senior / trainee
+Your task:
+➡️ Extract REAL, CONCRETE job requirements from ANY job description text.
+➡️ MUST work for ALL job types (industry‑agnostic).
 
-RULES:
-1. ALWAYS extract concrete skill keywords even if mentioned implicitly.
-2. Extract only meaningful skills, not generic fluff ("motivated", "nice", "friendly").
-3. If the job implies domain knowledge, extract it as a skill. Example:
-   - "we use forklifts" → skill: "forklift operation"
-   - "we write internal tools" → skill: "internal tools development"
-   - "clean code" → skill: "code quality"
-   - "communication with clients" → skill: "client communication"
-   - "working in hospital wards" → skill: "clinical operations"
-4. For IT roles, extract technologies (python, fastapi, sql, kubernetes…) ONLY if explicitly present.
-5. For healthcare roles, extract clinical competencies ONLY if relevant.
-6. For warehouse roles, extract physical and logistics tasks.
-7. For sales, extract communication, CRM, negotiation.
-8. For marketing, extract PPC, SEO, content writing etc.
-9. REQUIRED skills = MUST-HAVE skills (core tasks).
-10. NICE-TO-HAVE skills = optional or "advantage".
-11. Seniority must be "Senior", "Mid", "Junior", "Trainee".
-    If unclear, infer based on phrases:
-       - "we expect ownership", "architect", "lead" → Senior
-       - "independent", "experience needed" → Mid
-       - "junior", "entry-level" → Junior
-       - "we teach you", "you will learn" → Trainee
-12. Extract minimum years of experience:
-    - If explicitly stated, use it.
-    - If implied:
-        "experienced" → 3
-        "junior" → 0
-        "senior" → 5
-        "mid" → 2
-        "trainee" → 0
+This includes:
+- manufacturing, warehouse, logistics
+- healthcare, social care
+- administration, HR, customer support
+- sales, marketing, finance, accounting
+- IT, engineering, QA, devops, data
+- junior, mid, senior, trainee roles
+- management and leadership roles
 
-OUTPUT STRICTLY AS JSON:
+---------------------------------------
+### ✅ RULES FOR REQUIRED SKILLS
+---------------------------------------
+Extract **only measurable, concrete skills or technologies**.
+
+Examples:
+- “vývoj aplikací” → "application development"
+- “Python” → "python"
+- “FastAPI” → "fastapi"
+- “řízení VZV” → "forklift operation"
+- “péče o pacienty” → "patient care"
+- “účtování DPH” → "tax accounting"
+- “komunikace se zákazníky” → "customer communication"
+- “práce s pokladnou” → "cash register operation"
+- “plánování směn” → "shift planning"
+- “analýza dat” → "data analysis"
+- “marketingové kampaně” → "marketing campaigns"
+- “produktové myšlení” → "product thinking"
+
+Extract **implicit skills** too:
+- If JD mentions “we build internal tools”, extract "internal tools development".
+- If JD mentions “automatizace”, extract "process automation".
+- If JD mentions AI usage, extract "ai automation".
+
+NEVER extract fluff:  
+❌ team player  
+❌ motivated  
+❌ friendly  
+❌ enthusiasm  
+
+---------------------------------------
+### ✅ RULES FOR NICE‑TO‑HAVE SKILLS
+---------------------------------------
+Extract optional or “advantage” items.
+Only concrete skills, not personality traits.
+
+---------------------------------------
+### ✅ SENIORITY
+---------------------------------------
+Must be EXACTLY one of:
+- "Senior"
+- "Mid"
+- "Junior"
+- "Trainee"
+
+Infer from language:
+- “samostatný, zodpovědnost, ownership, senior” → Senior
+- “praxe X let, zkušenost” → Mid
+- “junior, vhodné pro absolventy” → Junior
+- “naučíme vás, trainee program” → Trainee
+
+If unclear:  
+→ classify based on tasks complexity  
+→ default = “Mid”
+
+---------------------------------------
+### ✅ MIN EXPERIENCE (years)
+---------------------------------------
+If JD mentions explicit number → use it.
+If implicit:
+- Senior → 5
+- Mid → 2
+- Junior → 0
+- Trainee → 0
+
+---------------------------------------
+### ✅ OUTPUT FORMAT (STRICT JSON!)
+---------------------------------------
 {
   "role": string,
-  "required_skills": [ ... ],
-  "nice_to_have_skills": [ ... ],
-  "seniority": "Senior|Mid|Junior|Trainee",
+  "required_skills": [string],
+  "nice_to_have_skills": [string],
+  "seniority": "Senior | Mid | Junior | Trainee",
   "min_experience": number
 }
+
+Only output JSON. No prose.
 """
+
+FALLBACK_PROMPT = """
+Extract REQUIRED skills from the job description ONLY as a flat list of keywords.
+Use simple noun phrases like:
+- python
+- fastapi
+- api design
+- customer communication
+- forklift operation
+- patient care
+- data entry
+- accounting
+
+Output JSON:
+{ "required_skills": [ ... ] }
+"""
+
 
 async def extract_structured_jd(jd_text: str) -> dict:
     """
-    Universal JD extractor (v7).
-    Works for ALL industries and job types.
-    Produces structured JSON for scoring.
+    Universal JD extractor v7.1
+    with intelligent fallback if the main extractor returns empty skills.
     """
 
     messages = [
         {"role": "system", "content": SYSTEM_PROMPT},
-        {"role": "user", "content": jd_text}
+        {"role": "user", "content": jd_text},
     ]
 
     try:
@@ -76,13 +132,31 @@ async def extract_structured_jd(jd_text: str) -> dict:
             response_format={"type": "json_object"},
             temperature=0
         )
-        return resp.choices[0].message.parsed
-    except Exception as e:
-        # fallback
+
+        jd_data = resp.choices[0].message.parsed
+
+        # ✅ If extractor failed to identify skills, use fallback
+        if not jd_data.get("required_skills"):
+            fb = await client.chat.completions.create(
+                model="gpt-4o-mini",
+                messages=[
+                    {"role": "system", "content": FALLBACK_PROMPT},
+                    {"role": "user", "content": jd_text},
+                ],
+                response_format={"type": "json_object"},
+                temperature=0
+            )
+            fallback = fb.choices[0].message.parsed
+            jd_data["required_skills"] = fallback.get("required_skills", [])
+
+        return jd_data
+
+    except Exception:
+        # Safe fallback for absolutely anything
         return {
             "role": "Unknown",
             "required_skills": [],
             "nice_to_have_skills": [],
-            "seniority": "Junior",
+            "seniority": "Mid",
             "min_experience": 0
         }
