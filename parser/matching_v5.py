@@ -60,24 +60,27 @@ async def compute_matching_v5(cv: dict, jd: dict | None):
 
     string_score = (string_score / max_string_score) * 40 if max_string_score > 0 else 0
 
-    # =====================================================================
+    # =========================================================
     # ✅ 2) EMBEDDING MATCH (0–40)
-    # =====================================================================
+    # =========================================================
     embed_score = 0
     embed_max = len(jd_req) * 4
-
+    
     for skill in jd_req:
         req_emb = await embed(skill)
         sims = [cos(req_emb, cv_emb) for cv_emb in cv_embs] if cv_embs else []
         sim = max(sims) if sims else 0
-
+    
         if sim > 0.75:
             embed_score += 4
-        elif sim > 0.55:
+        elif sim > 0.60:
             embed_score += 2
-        elif sim > 0.40:
+        elif sim > 0.55:
             embed_score += 1
-
+        # ✅ below 0.55 = NO MATCH
+        else:
+            embed_score += 0
+    
     embed_score = (embed_score / embed_max) * 40 if embed_max > 0 else 0
 
     # =====================================================================
