@@ -39,9 +39,21 @@ def sanitize_cv_data(data: dict) -> dict:
         "last_position": data.get("last_position"),
 
         
-    cv_clean["technologies"] = [
-    normalize_skill_label(t) for t in normalize_list(cv_raw.get("technologies"))
-    ]
+    cv_clean = {
+    "name": data.get("name"),
+    "email": normalize_email(data.get("email")),
+    "phone": data.get("phone"),
+    "years_experience": normalize_experience(data.get("years_experience")),
+    "technologies": [
+        normalize_skill_label(t) 
+        for t in normalize_list(data.get("technologies"))
+    ],
+    "languages": normalize_language_items(data.get("languages")),
+    "seniority": normalize_seniority(data.get("seniority")),
+    "last_position": data.get("last_position"),
+    "summary": data.get("summary")
+}
+
 
 
         # summary může být None
