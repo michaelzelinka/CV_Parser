@@ -1,4 +1,5 @@
 import os
+import json
 from openai import AsyncOpenAI
 from dotenv import load_dotenv
 
@@ -6,25 +7,26 @@ load_dotenv()
 client = AsyncOpenAI(api_key=os.getenv("OPENAI_API_KEY"))
 
 async def extract_structured_cv(text: str):
-    prompt = {
-        "cv_text": text,
-        "instructions": "Extract structured CV data."
-    }
+    prompt = """
+    Extract structured CV data from the following text.
+    Return a VALID JSON object with fields:
+    - name
+    - email
+    - phone
+    - years_experience
+    - technologies (list)
+    - languages (list)
+    - seniority
+    - last_position
+    - summary (3–5 sentences)
+    """
 
     response = await client.responses.create(
         model="gpt-4.1",
         input=[
-            {
-                "type": "input_text",
-                "text": f"Extract the following fields:\n"
-                        f"- name\n- email\n- phone\n- years_experience\n"
-                        f"- technologies (list)\n- languages (list)\n- seniority"
-            },
-            {
-                "type": "input_text",
-                "text": text
-            }
+            {"type": "input_text", "text": prompt},
+            {"type": "input_text", "text": text}
         ]
     )
 
-    return response.output_text
+    return json.loads(response.output_text)
