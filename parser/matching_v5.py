@@ -28,13 +28,16 @@ def cos(a, b):
 
 
 # ============================================================================
-# ✅ UNIVERSÁLNÍ SCORING ENGINE (v6) S PŮVODNÍM NÁZVEM compute_matching_v5
+# ✅ UNIVERSAL HR-FRIENDLY SCORING ENGINE (v7.0 LIGHT)
 # ============================================================================
 async def compute_matching_v5(cv: dict, jd: dict | None):
     """
-    Universal matching engine.
-    Funguje pro TECH, NON-TECH, dělnické pozice, healthcare, finance… všechno.
-    Není tam žádný IT bias, žádné hard-faily, žádné oborové váhy.
+    v7.0 LIGHT:
+    - Univerzální ATS scoring vhodný pro všechny typy pozic
+    - Žádné hard-faily, žádné IT bias
+    - Striktní potlačení slabých embedding podobností
+    - Velké rozlišení mezi “mimo obor” vs “fit”
+    - HR-safe pásma 0–100
     """
     if jd is None:
         return {"score": 0, "details": {"reason": "no_jd"}}
@@ -50,7 +53,7 @@ async def compute_matching_v5(cv: dict, jd: dict | None):
     # ✅ 1) STRING MATCH (0–40)
     # =====================================================================
     string_score = 0
-    max_string_score = len(jd_req) * 4  # každá required skill max 4 body
+    max_string_score = len(jd_req) * 4
 
     for skill in jd_req:
         s_low = skill.lower()
@@ -60,27 +63,25 @@ async def compute_matching_v5(cv: dict, jd: dict | None):
 
     string_score = (string_score / max_string_score) * 40 if max_string_score > 0 else 0
 
-    # =========================================================
+    # =====================================================================
     # ✅ 2) EMBEDDING MATCH (0–40)
-    # =========================================================
+    # =====================================================================
     embed_score = 0
     embed_max = len(jd_req) * 4
-    
+
     for skill in jd_req:
         req_emb = await embed(skill)
         sims = [cos(req_emb, cv_emb) for cv_emb in cv_embs] if cv_embs else []
         sim = max(sims) if sims else 0
-    
+
+        # ✅ v7.0 LIGHT — only strong & medium similarity count
         if sim > 0.75:
             embed_score += 4
         elif sim > 0.60:
             embed_score += 2
-        elif sim > 0.55:
-            embed_score += 1
-        # ✅ below 0.55 = NO MATCH
         else:
-            embed_score += 0
-    
+            embed_score += 0  # ✅ everything <0.60 = irrelevant match
+
     embed_score = (embed_score / embed_max) * 40 if embed_max > 0 else 0
 
     # =====================================================================
@@ -104,13 +105,13 @@ async def compute_matching_v5(cv: dict, jd: dict | None):
     seniority_score = 10 if cv_sen == jd_sen and cv_sen != "" else 0
 
     # =====================================================================
-    # ✅ FINAL
+    # ✅ FINAL SCORE
     # =====================================================================
-    final = string_score + embed_score + exp_score + seniority_score
-    final = int(max(0, min(100, final)))
+    final_score = string_score + embed_score + exp_score + seniority_score
+    final_score = int(max(0, min(100, final_score)))
 
     return {
-        "score": final,
+        "score": final_score,
         "details": {
             "string_score": string_score,
             "embedding_score": embed_score,
