@@ -2,12 +2,12 @@ import re
 from datetime import datetime
 
 
-# ----------------------------------------------------
-# ✅ Normalize experience (float)
-# ----------------------------------------------------
+# =====================================================================
+# ✅ EXPERIENCE NORMALIZATION (CZ/EN + ranges + text numbers)
+# =====================================================================
 def normalize_experience(value):
     """
-    Handles:
+    Handles all cases:
     - 5
     - "5"
     - "5 years"
@@ -15,9 +15,10 @@ def normalize_experience(value):
     - "five years"
     - "2–4 years"
     - "around 3"
-    - "2020–2025", "2018-2021"
+    - "2020–2025"
     - "recent graduate" -> None
     """
+
     if value is None:
         return None
 
@@ -29,19 +30,19 @@ def normalize_experience(value):
     except:
         pass
 
-    # Case 2: year range "2018–2023"
+    # Case 2: year range "2018-2023"
     match = re.match(r"(\d{4})\s*[-–]\s*(\d{4})", text)
     if match:
         y1, y2 = map(int, match.groups())
         if y2 >= y1:
             return float(y2 - y1)
 
-    # Case 3: explicit number in text
+    # Case 3: explicit number inside text
     number = re.search(r"(\d+(?:\.\d+)?)", text)
     if number:
         return float(number.group(1))
 
-    # Case 4: Czech words → number
+    # Case 4: Czech text numbers
     czech_map = {
         "jeden": 1, "jedna": 1,
         "dva": 2, "dvě": 2,
@@ -58,7 +59,7 @@ def normalize_experience(value):
         if word in text:
             return float(num)
 
-    # Case 5: English words → number
+    # Case 5: English text numbers
     english_map = {
         "one": 1, "two": 2, "three": 3,
         "four": 4, "five": 5,
@@ -73,9 +74,9 @@ def normalize_experience(value):
     return None
 
 
-# ----------------------------------------------------
-# ✅ Normalize list-like fields
-# ----------------------------------------------------
+# =====================================================================
+# ✅ LIST NORMALIZATION
+# =====================================================================
 def normalize_list(value):
     """
     Accepts:
@@ -84,6 +85,7 @@ def normalize_list(value):
     - ["Python", "SQL"]
     - "Python / SQL / Docker"
     """
+
     if value is None:
         return []
 
@@ -100,9 +102,9 @@ def normalize_list(value):
     return []
 
 
-# ----------------------------------------------------
-# ✅ Normalize language entries (CZ/EN, dicts)
-# ----------------------------------------------------
+# =====================================================================
+# ✅ LANGUAGES NORMALIZATION
+# =====================================================================
 def normalize_language_items(value):
     """
     Handles:
@@ -114,7 +116,6 @@ def normalize_language_items(value):
     if value is None:
         return []
 
-    # Already a flat string
     if isinstance(value, str):
         return normalize_list(value)
 
@@ -122,8 +123,7 @@ def normalize_language_items(value):
 
     if isinstance(value, list):
         for item in value:
-
-            # Case 1: dict style {"language": "...", "level": "..."}
+            # dict style {"language": "...", "level": "..."}
             if isinstance(item, dict):
                 lang = item.get("language") or item.get("lang")
                 level = item.get("level")
@@ -134,16 +134,16 @@ def normalize_language_items(value):
                     normalized.append(str(lang))
                 continue
 
-            # Case 2: plain string
+            # plain string
             if isinstance(item, str):
                 normalized.append(item.strip())
 
     return normalized
 
 
-# ----------------------------------------------------
-# ✅ Normalize email
-# ----------------------------------------------------
+# =====================================================================
+# ✅ EMAIL NORMALIZATION
+# =====================================================================
 def normalize_email(value):
     if not value:
         return None
@@ -151,9 +151,9 @@ def normalize_email(value):
     return v if "@" in v else None
 
 
-# ----------------------------------------------------
-# ✅ Normalize seniority
-# ----------------------------------------------------
+# =====================================================================
+# ✅ SENIORITY NORMALIZATION
+# =====================================================================
 def normalize_seniority(value):
     if not value:
         return None
@@ -172,59 +172,19 @@ def normalize_seniority(value):
     return value.strip().title()
 
 
-# ----------------------------------------------------
-# ✅ Bilingual CZ→EN skill normalizer
-# ----------------------------------------------------
+# =====================================================================
+# ✅ SKILL NORMALIZER v2.0 (CZ→EN + unification + tech mapping)
+# =====================================================================
 def normalize_skill_label(skill: str) -> str:
     """
-    Converts Czech skills to English equivalents so scoring works.
+    Converts Czech skills and technology-specific labels into
+    unified English "core skills" to allow proper scoring & embeddings.
+
     Example:
     - "datová analýza" → "data analysis"
-    - "projektové řízení" → "project management"
-    """
-
-    if not skill:
-        return ""
-
-    s = skill.lower().strip()
-
-    mapping = {
-        "datová analýza": "data analysis",
-        "analýza dat": "data analysis",
-        "projektové řízení": "project management",
-        "řízení projektů": "project management",
-        "analýza požadavků": "requirements analysis",
-        "testování": "software testing",
-        "biometrická data": "biometrics",
-        "aplikace": "application support",
-        "správa klientského portfolia": "customer portfolio management",
-        "bezpečnost": "security",
-        "it bezpečnost": "it security",
-        "sociální sítě": "social media",
-        "marketing": "marketing",
-    }
-
-    if s in mapping:
-        return mapping[s]
-
-    return skill.strip().lower()
-
-# ----------------------------------------------------
-# ✅ Skill Normalizer v2.0 (CZ → EN + Tech mapping)
-# ----------------------------------------------------
-def normalize_skill_label(skill: str) -> str:
-    """
-    Normalizes Czech/English skill labels and maps them 
-    to unified technical skill categories for matching.
-
-    Examples:
-    - "datová analýza" -> "data analysis"
-    - "analýza dat" -> "data analysis"
-    - "power bi" -> "data analysis"
-    - "python" -> "software development"
-    - "fastapi" -> "software development"
-    - "projektové řízení" -> "project management"
-    - "ai/llm integrations" -> "ai"
+    - "python" → "software development"
+    - "power bi" → "data analysis"
+    - "elk" → "system analysis"
     """
 
     if not skill:
@@ -240,29 +200,27 @@ def normalize_skill_label(skill: str) -> str:
         "analýza dat": "data analysis",
         "projektové řízení": "project management",
         "řízení projektů": "project management",
+        "umělá inteligence": "ai",
+        "automatizace": "automation",
+        "procesní automatizace": "automation",
+        "správa klientského portfolia": "customer portfolio management",
         "testování": "software testing",
         "testování softwaru": "software testing",
-        "biometrická data": "biometrics",
+        "analýza požadavků": "requirements analysis",
         "it bezpečnost": "it security",
         "bezpečnost": "security",
-        "aplikace": "application support",
-        "správa klientského portfolia": "customer portfolio management",
         "sociální sítě": "social media",
         "marketing": "marketing",
-        "automatizace": "automation",
-        "automatizační procesy": "automation",
-        "umělá inteligence": "ai",
-        "analýza požadavků": "requirements analysis",
     }
 
     if s in cz_to_en:
         return cz_to_en[s]
 
     # ----------------------------------------
-    # ✅ Common technical keywords → categories
+    # ✅ Technical keyword → core category
     # ----------------------------------------
     tech_map = {
-        # programming → software development
+        # Programming
         "python": "software development",
         "fastapi": "software development",
         "javascript": "software development",
@@ -271,51 +229,47 @@ def normalize_skill_label(skill: str) -> str:
         "c#": "software development",
         "c++": "software development",
         "php": "software development",
-        "go": "software development",
-        "rust": "software development",
 
-        # devops / api / backend infra
-        "api": "software development",
-        "rest": "software development",
-        "git": "software development",
-        "docker": "software development",
-        "kubernetes": "software development",
-
-        # data  
+        # Data & BI
         "sql": "data analysis",
         "power bi": "data analysis",
         "tableau": "data analysis",
         "excel": "data analysis",
+
+        # Systems
         "elk": "system analysis",
         "elasticsearch": "system analysis",
         "kibana": "system analysis",
         "logstash": "system analysis",
 
-        # ai / automation
+        # AI & Automation
         "ai": "ai",
         "ai/llm integrations": "ai",
         "llm": "ai",
-        "automation": "automation",
-        "process automation": "automation",
         "chatbot": "ai",
         "chatbots": "ai",
+        "automation": "automation",
+        "process automation": "automation",
 
-        # enterprise tools
+        # Enterprise
         "sap": "sap",
         "sap fiori": "sap",
         "application support": "application support",
 
-        # project role signals
+        # Project
+        "api": "software development",
+        "git": "software development",
+        "docker": "software development",
+        "kubernetes": "software development",
         "project management": "project management",
         "scrum": "project management",
-        "agile": "project management",
-        "jira": "project management",
+        "agile": "project management"
     }
 
-    # EXPAND: partial matching
+    # ✅ partial keyword match
     for key, normalized in tech_map.items():
         if key in s:
             return normalized
 
-    # fallback: return cleaned version
+    # fallback: lowercase raw skill
     return s
