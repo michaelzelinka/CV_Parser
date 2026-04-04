@@ -208,3 +208,114 @@ def normalize_skill_label(skill: str) -> str:
         return mapping[s]
 
     return skill.strip().lower()
+
+# ----------------------------------------------------
+# ✅ Skill Normalizer v2.0 (CZ → EN + Tech mapping)
+# ----------------------------------------------------
+def normalize_skill_label(skill: str) -> str:
+    """
+    Normalizes Czech/English skill labels and maps them 
+    to unified technical skill categories for matching.
+
+    Examples:
+    - "datová analýza" -> "data analysis"
+    - "analýza dat" -> "data analysis"
+    - "power bi" -> "data analysis"
+    - "python" -> "software development"
+    - "fastapi" -> "software development"
+    - "projektové řízení" -> "project management"
+    - "ai/llm integrations" -> "ai"
+    """
+
+    if not skill:
+        return ""
+
+    s = skill.lower().strip()
+
+    # ----------------------------------------
+    # ✅ Direct CZ → EN translations
+    # ----------------------------------------
+    cz_to_en = {
+        "datová analýza": "data analysis",
+        "analýza dat": "data analysis",
+        "projektové řízení": "project management",
+        "řízení projektů": "project management",
+        "testování": "software testing",
+        "testování softwaru": "software testing",
+        "biometrická data": "biometrics",
+        "it bezpečnost": "it security",
+        "bezpečnost": "security",
+        "aplikace": "application support",
+        "správa klientského portfolia": "customer portfolio management",
+        "sociální sítě": "social media",
+        "marketing": "marketing",
+        "automatizace": "automation",
+        "automatizační procesy": "automation",
+        "umělá inteligence": "ai",
+        "analýza požadavků": "requirements analysis",
+    }
+
+    if s in cz_to_en:
+        return cz_to_en[s]
+
+    # ----------------------------------------
+    # ✅ Common technical keywords → categories
+    # ----------------------------------------
+    tech_map = {
+        # programming → software development
+        "python": "software development",
+        "fastapi": "software development",
+        "javascript": "software development",
+        "typescript": "software development",
+        "java": "software development",
+        "c#": "software development",
+        "c++": "software development",
+        "php": "software development",
+        "go": "software development",
+        "rust": "software development",
+
+        # devops / api / backend infra
+        "api": "software development",
+        "rest": "software development",
+        "git": "software development",
+        "docker": "software development",
+        "kubernetes": "software development",
+
+        # data  
+        "sql": "data analysis",
+        "power bi": "data analysis",
+        "tableau": "data analysis",
+        "excel": "data analysis",
+        "elk": "system analysis",
+        "elasticsearch": "system analysis",
+        "kibana": "system analysis",
+        "logstash": "system analysis",
+
+        # ai / automation
+        "ai": "ai",
+        "ai/llm integrations": "ai",
+        "llm": "ai",
+        "automation": "automation",
+        "process automation": "automation",
+        "chatbot": "ai",
+        "chatbots": "ai",
+
+        # enterprise tools
+        "sap": "sap",
+        "sap fiori": "sap",
+        "application support": "application support",
+
+        # project role signals
+        "project management": "project management",
+        "scrum": "project management",
+        "agile": "project management",
+        "jira": "project management",
+    }
+
+    # EXPAND: partial matching
+    for key, normalized in tech_map.items():
+        if key in s:
+            return normalized
+
+    # fallback: return cleaned version
+    return s
