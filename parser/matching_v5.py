@@ -2,7 +2,6 @@ import numpy as np
 from openai import AsyncOpenAI
 
 client = AsyncOpenAI()
-
 _embedding_cache = {}
 
 async def embed(text: str):
@@ -28,153 +27,90 @@ def cos(a, b):
     return float(np.dot(a, b) / denom)
 
 
-# =============================================================================
-# ✅ Skill Categories (weights)
-# =============================================================================
-CATEGORIES = {
-    "backend": {
-        "keywords": ["python", "fastapi", "api", "backend", "microservice", "server"],
-        "weight": 4
-    },
-    "ai": {
-        "keywords": ["ai", "llm", "automation", "machine learning", "chatbot"],
-        "weight": 3
-    },
-    "data": {
-        "keywords": ["sql", "etl", "data", "analytics"],
-        "weight": 2
-    },
-    "frontend": {
-        "keywords": ["vue", "javascript", "typescript"],
-        "weight": 1
-    },
-}
-
-
-# =============================================================================
-# ✅ Seniority alignment matrix
-# =============================================================================
-SENIORITY_GRID = {
-    ("Senior", "Senior"): +10,
-    ("Mid", "Senior"): +3,
-    ("Junior", "Senior"): -10,
-    ("Trainee", "Senior"): -20,
-
-    ("Senior", "Mid"): +3,
-    ("Mid", "Mid"): +5,
-    ("Junior", "Mid"): -5,
-    ("Trainee", "Mid"): -15,
-
-    ("Senior", "Junior"): -8,
-    ("Mid", "Junior"): -3,
-    ("Junior", "Junior"): +6,
-    ("Trainee", "Junior"): -5,
-
-    ("Senior", "Trainee"): -20,
-    ("Mid", "Trainee"): -10,
-    ("Junior", "Trainee"): +1,
-    ("Trainee", "Trainee"): +6,
-}
-
-
-# =============================================================================
-# ✅ MAIN SCORING FUNCTION v5.0
-# =============================================================================
+# ============================================================================
+# ✅ UNIVERSÁLNÍ SCORING ENGINE (v6) S PŮVODNÍM NÁZVEM compute_matching_v5
+# ============================================================================
 async def compute_matching_v5(cv: dict, jd: dict | None):
+    """
+    Universal matching engine.
+    Funguje pro TECH, NON-TECH, dělnické pozice, healthcare, finance… všechno.
+    Není tam žádný IT bias, žádné hard-faily, žádné oborové váhy.
+    """
     if jd is None:
-        return {"score": 50, "details": {"reason": "No JD provided"}}
+        return {"score": 0, "details": {"reason": "no_jd"}}
 
-    cv_sk = cv.get("technologies_normalized", [])
+    cv_skills = cv.get("technologies_normalized", [])
     jd_req = jd.get("required_skills", [])
     jd_opt = jd.get("nice_to_have_skills", [])
 
-    cv_embs = [await embed(s) for s in cv_sk]
+    # Prepare embeddings
+    cv_embs = [await embed(s) for s in cv_skills]
 
-    # =============================================================
-    # ✅ 1) Required skill fuzzy scoring → 0–60
-    # =============================================================
-    req_raw = 0
-    req_total_weight = 0
+    # =====================================================================
+    # ✅ 1) STRING MATCH (0–40)
+    # =====================================================================
+    string_score = 0
+    max_string_score = len(jd_req) * 4  # každá required skill max 4 body
 
     for skill in jd_req:
-        s_emb = await embed(skill)
-        similarities = [cos(s_emb, e) for e in cv_embs]
-        sim = max(similarities) if similarities else 0.0
+        s_low = skill.lower()
+        matched = any(s_low in cv_s.lower() for cv_s in cv_skills)
+        if matched:
+            string_score += 4
 
-        weight = 1
-        sl = skill.lower()
-        for cat in CATEGORIES.values():
-            if any(k in sl for k in cat["keywords"]):
-                weight = cat["weight"]
+    string_score = (string_score / max_string_score) * 40 if max_string_score > 0 else 0
 
-        req_total_weight += weight
+    # =====================================================================
+    # ✅ 2) EMBEDDING MATCH (0–40)
+    # =====================================================================
+    embed_score = 0
+    embed_max = len(jd_req) * 4
 
-        if sim > 0.80:
-            req_raw += 1.0 * weight
-        elif sim > 0.65:
-            req_raw += 0.6 * weight
-        elif sim > 0.45:
-            req_raw += 0.2 * weight
+    for skill in jd_req:
+        req_emb = await embed(skill)
+        sims = [cos(req_emb, cv_emb) for cv_emb in cv_embs] if cv_embs else []
+        sim = max(sims) if sims else 0
 
-    required_score = 0
-    if req_total_weight > 0:
-        required_score = (req_raw / req_total_weight) * 60
+        if sim > 0.75:
+            embed_score += 4
+        elif sim > 0.55:
+            embed_score += 2
+        elif sim > 0.40:
+            embed_score += 1
 
+    embed_score = (embed_score / embed_max) * 40 if embed_max > 0 else 0
 
-    # =============================================================
-    # ✅ 2) Optional skill scoring → 0–10
-    # =============================================================
-    opt_score = 0
-
-    for skill in jd_opt:
-        s_emb = await embed(skill)
-        sim = max(cos(s_emb, e) for e in cv_embs) if cv_embs else 0.0
-
-        if sim > 0.80:
-            opt_score += 1.5
-        elif sim > 0.60:
-            opt_score += 0.7
-
-    opt_score = min(opt_score, 10)
-
-
-    # =============================================================
-    # ✅ 3) Experience alignment → 0–15
-    # =============================================================
+    # =====================================================================
+    # ✅ 3) EXPERIENCE SCORE (0–10)
+    # =====================================================================
     cv_exp = cv.get("years_experience") or 0
     jd_exp = jd.get("min_experience") or 0
 
     if jd_exp == 0:
-        exp_score = min(cv_exp * 0.5, 4)
+        exp_score = min(cv_exp, 10)
     else:
         ratio = min(cv_exp / jd_exp, 1.0)
-        exp_score = ratio * 15
+        exp_score = ratio * 10
 
+    # =====================================================================
+    # ✅ 4) SENIORITY SCORE (0–10)
+    # =====================================================================
+    cv_sen = cv.get("seniority") or ""
+    jd_sen = jd.get("seniority") or ""
 
-    # =============================================================
-    # ✅ 4) Seniority alignment (penalty/bonus)
-    # =============================================================
-    cv_sen = cv.get("seniority") or "Unknown"
-    jd_sen = jd.get("seniority") or "Unknown"
+    seniority_score = 10 if cv_sen == jd_sen and cv_sen != "" else 0
 
-    seniority_score = SENIORITY_GRID.get((jd_sen, cv_sen), 0)
-
-
-    # =============================================================
-    # ✅ 5) Hard-fail rule (no relevant match → max 10)
-    # =============================================================
-    if required_score < 5 and opt_score < 3:
-        final_score = min(exp_score + seniority_score, 10)
-    else:
-        final_score = required_score + opt_score + exp_score + seniority_score
-
-    final_score = int(max(0, min(100, final_score)))
+    # =====================================================================
+    # ✅ FINAL
+    # =====================================================================
+    final = string_score + embed_score + exp_score + seniority_score
+    final = int(max(0, min(100, final)))
 
     return {
-        "score": final_score,
+        "score": final,
         "details": {
-            "required_score": required_score,
-            "optional_score": opt_score,
+            "string_score": string_score,
+            "embedding_score": embed_score,
             "experience_score": exp_score,
             "seniority_score": seniority_score
         }
