@@ -4,15 +4,15 @@ from parser.extract_text import extract_text_from_file
 from parser.llm_extractor import extract_structured_cv
 from parser.llm_jd import extract_structured_jd
 
-# ✅ SANITIZERS (verze 1.1)
+# ✅ SANITIZERS (verze 1.1 + skill normalizer)
 from parser.sanitizers import (
     normalize_experience,
     normalize_list,
     normalize_email,
     normalize_seniority,
     normalize_language_items,
+    normalize_skill_label
 )
-
 
 router = APIRouter()
 
@@ -29,34 +29,17 @@ def sanitize_cv_data(data: dict) -> dict:
         # years: 5, "5 let", "pět let", "2020–2025", "around 3"
         "years_experience": normalize_experience(data.get("years_experience")),
 
-        # technologies: "Python, SQL" → ["Python","SQL"]
-        "technologies": normalize_list(data.get("technologies")),
+        # Bilingual skill normalization (CZ→EN)
+        "technologies": [
+            normalize_skill_label(t)
+            for t in normalize_list(data.get("technologies"))
+        ],
 
-        # languages: dicts, mixed formats → ["čeština (native)", "angličtina (B2)"]
+        # languages can be list OR list of dicts → normalize
         "languages": normalize_language_items(data.get("languages")),
 
         "seniority": normalize_seniority(data.get("seniority")),
         "last_position": data.get("last_position"),
-
-        
-    cv_clean = {
-    "name": data.get("name"),
-    "email": normalize_email(data.get("email")),
-    "phone": data.get("phone"),
-    "years_experience": normalize_experience(data.get("years_experience")),
-    "technologies": [
-        normalize_skill_label(t) 
-        for t in normalize_list(data.get("technologies"))
-    ],
-    "languages": normalize_language_items(data.get("languages")),
-    "seniority": normalize_seniority(data.get("seniority")),
-    "last_position": data.get("last_position"),
-    "summary": data.get("summary")
-}
-
-
-
-        # summary může být None
         "summary": data.get("summary")
     }
 
@@ -126,19 +109,17 @@ async def parse_cv(
             raise HTTPException(status_code=400, detail=f"Invalid JD data: {e}")
 
     # ---------------------------------------
-    # ✅ MATCHING 1.0 (jednoduchý)
+    # ✅ MATCHING 1.0 (simple version)
     # ---------------------------------------
-    # aby fungoval i s minimem dat
-
-    score = 50  # default neutral
+    score = 50  # fallback neutral score
 
     try:
         score = 0
 
-        # SKILLS — 40 %
         cv_skills = set(cv_clean["technologies"])
         jd_required = set(jd_clean["required_skills"]) if jd_clean else set()
 
+        # SKILLS — 40 %
         if jd_required:
             overlap = len(cv_skills & jd_required) / len(jd_required)
             score += overlap * 40
@@ -147,7 +128,7 @@ async def parse_cv(
         cv_exp = cv_clean["years_experience"]
         jd_exp = jd_clean["min_experience"] if jd_clean else None
 
-        if cv_exp and jd_exp:
+        if cv_exp and jd_exp and jd_exp > 0:
             score += min(cv_exp / jd_exp, 1.0) * 30
 
         # SENIORITY — 30 %
@@ -157,7 +138,7 @@ async def parse_cv(
         score = int(round(min(score, 100)))
 
     except Exception:
-        score = 50  # fallback
+        score = 50  # fallback if anything goes wrong
 
     # ---------------------------------------
     # ✅ Final response
