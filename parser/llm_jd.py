@@ -32,7 +32,6 @@ async def extract_structured_jd(jd_text: str) -> dict:
         jd = resp.choices[0].message.parsed
 
     except Exception:
-        # minimal fallback (never empty)
         jd = {
             "role": None,
             "required_skills": [],
@@ -49,13 +48,11 @@ async def extract_structured_jd(jd_text: str) -> dict:
             req.append(s)
 
     if not req:
-        # minimal fallback to avoid scoring = 0
-        req = ["communication", "teamwork", "organization"]
+        req = ["communication", "teamwork", "python"]  # ✅ MVP fallback
 
     jd["required_skills"] = req
     jd["nice_to_have_skills"] = jd.get("nice_to_have_skills", []) or []
 
-    # ✅ fallback seniority
     txt = jd_text.lower()
     if not jd.get("seniority"):
         if "senior" in txt:
@@ -65,7 +62,6 @@ async def extract_structured_jd(jd_text: str) -> dict:
         else:
             jd["seniority"] = "Mid"
 
-    # ✅ fallback experience
     if jd.get("min_experience") is None:
         jd["min_experience"] = 0
 
