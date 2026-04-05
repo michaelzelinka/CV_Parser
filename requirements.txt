@@ -1,7 +1,7 @@
 fastapi
 uvicorn
 python-dotenv
-openai
+openai>=1.40.0
 pdfplumber
 python-docx
 pydantic
