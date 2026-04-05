@@ -136,7 +136,7 @@ async def parse_cv(
     # ✅ SCORING — v7 LIGHT (named compute_matching_v5)
     # ------------------------------------------------------------
     try:
-        scoring = await compute_matching_v5(cv_clean, jd_clean)
+        scoring = await compute_matching_v7_5(cv_clean, jd_clean)
         score = scoring["score"]
         details = scoring["details"]
     except Exception as e:
