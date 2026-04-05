@@ -1,4 +1,5 @@
 from fastapi import FastAPI
+from fastapi.middleware.cors import CORSMiddleware
 from api.routes import router
 
 app = FastAPI(
@@ -7,9 +8,19 @@ app = FastAPI(
     description="Internal API for CV parsing and matching"
 )
 
-# Register router
+# ✅ CORS – nutné pro Streamlit → Render komunikaci
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["*"],          # můžeš později omezit na konkrétní doménu
+    allow_credentials=True,
+    allow_methods=["*"],          # povolit POST, GET, OPTIONS
+    allow_headers=["*"],
+)
+
+# ✅ Router – bez prefixu, endpoint je /parse
 app.include_router(router)
 
+# ✅ Base endpoints
 @app.get("/")
 def root():
     return {"message": "API is running"}
