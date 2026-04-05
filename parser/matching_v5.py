@@ -1,38 +1,68 @@
 async def compute_matching_v7_5(cv: dict, jd: dict | None):
+
     if jd is None:
         return {"score": 0, "details": {"reason": "no_jd"}}
 
-    # LOWERCASE
-    cv_sk = [s.lower() for s in cv.get("technologies_normalized", [])]
-    jd_req = [s.lower() for s in jd.get("required_skills", [])]
-    jd_tech = [s.lower() for s in jd.get("tech_stack", [])]
+    # ---------------------------------------
+    # Normalized lists
+    # ---------------------------------------
+    cv_skills = [s.lower() for s in cv.get("technologies_normalized", [])]
+    jd_required = [s.lower() for s in (jd.get("required_skills") or [])]
+    jd_tech = [s.lower() for s in (jd.get("tech_stack") or [])]
 
-    # ✅ 1) REQUIRED SKILLS score (0–40)
-    req_matches = sum(1 for s in jd_req if s in cv_sk)
-    req_score = (req_matches / max(len(jd_req), 1)) * 40 if jd_req else 20
+    # ---------------------------------------
+    # 1) TECH MATCH (0–60)
+    # ---------------------------------------
+    tech_hits = sum(1 for t in jd_tech if t in cv_skills)
+    tech_score = (tech_hits / max(len(jd_tech), 1)) * 60 if jd_tech else 0
 
-    # ✅ 2) TECH STACK score (0–40)
-    tech_matches = sum(1 for s in jd_tech if s in cv_sk)
-    tech_score = (tech_matches / max(len(jd_tech), 1)) * 40 if jd_tech else 0
+    # ---------------------------------------
+    # 2) ROLE RELEVANCE (0–25)
+    # ---------------------------------------
+    # Pokud jde o technickou roli (má tech_stack)
+    if len(jd_tech) >= 2:
+        # technická role → technický kandidát
+        if tech_hits > 0:
+            role_score = 25
+        else:
+            role_score = 0
+    else:
+        # JD není technická → dáme body netechnickým lidem
+        if tech_hits == 0:
+            role_score = 25
+        else:
+            role_score = 10
 
-    # ✅ 3) EXPERIENCE (0–10)
+    # ---------------------------------------
+    # 3) EXPERIENCE (0–10)
+    # ---------------------------------------
     cv_exp = cv.get("years_experience") or 0
     jd_exp = jd.get("min_experience") or 0
-    exp_score = 10 if cv_exp >= jd_exp else max(0, (cv_exp / max(jd_exp, 1)) * 10)
 
-    # ✅ 4) SENIORITY (0–10)
-    cv_s = (cv.get("seniority") or "").lower()
-    jd_s = (jd.get("seniority") or "").lower()
-    seniority_score = 10 if cv_s == jd_s else 5
+    if cv_exp >= jd_exp:
+        exp_score = 10
+    else:
+        exp_score = (cv_exp / max(jd_exp, 1)) * 10
 
-    final = int(min(100, req_score + tech_score + exp_score + seniority_score))
+    # ---------------------------------------
+    # 4) NOISE REDUCTION
+    # ---------------------------------------
+    penalty = 0
+    # Pokud role je technická, ale kandidát má 0 tech_hits → tvrdá penalizace
+    if len(jd_tech) >= 2 and tech_hits == 0:
+        penalty = -30
+
+    # ---------------------------------------
+    # Final aggregation
+    # ---------------------------------------
+    final = int(max(0, min(100, tech_score + role_score + exp_score + penalty)))
 
     return {
         "score": final,
         "details": {
-            "required_score": req_score,
-            "tech_stack_score": tech_score,
+            "tech_score": tech_score,
+            "role_score": role_score,
             "experience_score": exp_score,
-            "seniority_score": seniority_score,
+            "penalty": penalty
         }
     }
