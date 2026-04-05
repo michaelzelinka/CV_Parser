@@ -4,40 +4,41 @@ import re
 client = AsyncOpenAI()
 
 SYSTEM_PROMPT = """
-You are an HR Job Description Parser.
+You are an HR job description parser.
 
-Extract ONLY skills, competencies, tools, or qualifications that are explicitly or implicitly required in the job description.
+Extract two layers from the JD:
+
+1) required_skills  = explicit REQUIREMENTS (must-have)
+2) tech_stack       = all technologies, tools, platforms, or systems mentioned anywhere in the JD
 
 This must work for ALL job categories:
-- healthcare (nurses, doctors, caregivers)
-- administration (office, reception, assistant roles)
+- healthcare (nurses, doctors)
+- administration
 - finance & accounting
 - customer service
-- marketing & sales
-- logistics & manufacturing
 - hospitality
+- manufacturing, warehouse
+- retail
+- marketing & sales
 - IT & technical roles
 - management & leadership
-- blue collar roles (operators, cleaners, production workers, drivers)
 
 RULES:
-1) Extract ONLY skills that are explicitly mentioned OR clearly implied.
-2) Include:
-   - technical skills (Python, Excel, SAP...)
-   - soft skills (communication, teamwork...)
-   - industry skills (patient care, sterilization, bookkeeping...)
-   - tools/platforms (EPIC, SAP, CRM systems, cash register...)
-   - certifications (BLS, CPA, forklift license...)
-3) Do NOT hallucinate or invent skills.
-4) DO NOT return benefits or company culture.
-5) Seniority is based ONLY on: junior, mid, senior, lead, supervisor.
-6) min_experience = number of years if mentioned, else null.
-7) Role = job title if found.
+1) Extract ONLY skills explicitly or implicitly present in the text.
+2) Do NOT hallucinate.
+3) Extract ALL technologies (Kubernetes, SAP, CRM systems, X-ray equipment, Python…)
+4) Extract ALL tools and platforms (EPIC, SAP, Salesforce, etc.)
+5) Extract ALL domain skills (patient care, bookkeeping, logistics operations…)
+6) Extract ALL soft skills if mentioned or implied (communication, teamwork…)
+7) Seniority must be based on keywords.
+8) min_experience = number of years if mentioned.
+9) role = job title if present.
 
-Return ONLY valid JSON structure:
+Return ONLY valid JSON in this structure:
 {
   "role": string | null,
   "required_skills": [string],
+  "tech_stack": [string],
   "nice_to_have_skills": [string],
   "seniority": "Senior" | "Mid" | "Junior" | "Trainee" | null,
   "min_experience": number | null
@@ -45,7 +46,7 @@ Return ONLY valid JSON structure:
 """
 
 async def extract_structured_jd(jd_text: str) -> dict:
-    # Try LLM extraction
+
     try:
         resp = await client.chat.completions.create(
             model="gpt-4o-mini",
@@ -57,79 +58,65 @@ async def extract_structured_jd(jd_text: str) -> dict:
             response_format={"type": "json_object"}
         )
         jd = resp.choices[0].message.parsed
+
     except Exception:
-        # Minimal fallback (never empty)
-        jd = {
+        return {
             "role": None,
             "required_skills": [],
+            "tech_stack": [],
             "nice_to_have_skills": [],
             "seniority": None,
             "min_experience": None
         }
 
     # ✅ Clean required skills
-    skills = []
+    req = []
     for s in jd.get("required_skills", []):
         s = s.strip()
         if len(s) < 2:
             continue
         if s.lower().endswith("ovat"):
             continue
-        if re.match(r"^[0-9]+$", s):
+        req.append(s)
+
+    # ✅ Clean tech stack
+    tech = []
+    for s in jd.get("tech_stack", []):
+        s = s.strip()
+        if len(s) < 2:
             continue
-        skills.append(s)
+        if s.lower().endswith("ovat"):
+            continue
+        tech.append(s)
 
-    # ✅ If LLM returned nothing → fallback basic extraction
-    if not skills:
+    # ✅ Fallback — JD must contain SOMETHING
+    if not tech:
+        # ultra-safe fallback based on categories
         lower = jd_text.lower()
-        fallback = []
-
-        # Healthcare
-        if "nurse" in lower or "patient" in lower or "clinical" in lower:
-            fallback = ["patient care", "documentation", "vitals monitoring"]
-
-        # Administration
-        elif "office" in lower or "assistant" in lower or "administration" in lower:
-            fallback = ["excel", "email handling", "scheduling"]
-
-        # Finance / accounting
-        elif "accounting" in lower or "invoice" in lower or "finance" in lower:
-            fallback = ["excel", "bookkeeping", "invoicing"]
-
-        # Customer service
-        elif "customer" in lower or "call" in lower or "support" in lower:
-            fallback = ["communication", "problem solving", "crm systems"]
-
-        # Manufacturing / warehouse
-        elif "warehouse" in lower or "production" in lower:
-            fallback = ["scanning", "inventory handling", "quality control"]
-
-        # Hospitality
-        elif "restaurant" in lower or "kitchen" in lower or "hospitality" in lower:
-            fallback = ["customer service", "cash handling", "food safety"]
-
-        # IT fallback
+        if any(word in lower for word in ["python", "api", "cloud", "kubernetes"]):
+            tech = ["Python", "APIs", "Cloud", "Kubernetes"]
+        elif any(word in lower for word in ["patient", "clinical", "nurse"]):
+            tech = ["patient care", "documentation"]
+        elif any(word in lower for word in ["invoice", "accounting"]):
+            tech = ["Excel", "bookkeeping"]
         else:
-            fallback = ["communication"]
+            tech = ["communication"]
 
-        skills = fallback
-
-    jd["required_skills"] = skills
-
-    # ✅ nice-to-have cleanup
+    jd["required_skills"] = req or ["communication"]
+    jd["tech_stack"] = tech
     jd["nice_to_have_skills"] = jd.get("nice_to_have_skills", []) or []
 
-    # ✅ Infer seniority
-    text = jd_text.lower()
+    # ✅ Seniority
+    t = jd_text.lower()
     if not jd.get("seniority"):
-        if "senior" in text or "lead" in text:
+        if "senior" in t or "lead" in t:
             jd["seniority"] = "Senior"
-        elif "junior" in text:
+        elif "junior" in t:
             jd["seniority"] = "Junior"
         else:
             jd["seniority"] = "Mid"
 
-    # ✅ Experience fallback
+    # ✅ Experience
     if jd.get("min_experience") is None:
         jd["min_experience"] = 0
 
