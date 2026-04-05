@@ -22,7 +22,7 @@ Return JSON:
 async def extract_structured_jd(jd_text: str) -> dict:
     try:
         resp = await client.chat.completions.create(
-            model="gpt-4o-mini",
+            model="gpt-4.1-mini",
             messages=[
                 {"role": "system", "content": SYSTEM_PROMPT},
                 {"role": "user", "content": jd_text}
