@@ -1,0 +1,16 @@
+[
+  "Python","JavaScript","TypeScript","Java","C#","C++","Go","PHP","Ruby","Kotlin","Swift","Rust","R",
+  "HTML","CSS","SASS","LESS",
+  "React","Vue.js","Angular","Svelte",
+  "Node.js","Express","FastAPI","Django","Flask","Spring Boot",
+  "REST API","GraphQL","API design","Microservices","Serverless",
+  "Docker","Kubernetes","Helm","Terraform",
+  "AWS","Azure","Google Cloud",
+  "CI/CD","Git","GitHub Actions","GitLab CI",
+  "SQL","PostgreSQL","MySQL","MariaDB","Oracle","MongoDB","Redis",
+  "Elasticsearch","Kafka","RabbitMQ",
+  "Unit testing","Integration testing","Automation testing","Playwright","Selenium","Cypress",
+  "Machine Learning","AI automation","NLP","Computer Vision",
+  "PyTorch","TensorFlow","scikit-learn",
+  "System design","Software architecture","Clean code","Refactoring"
+]
