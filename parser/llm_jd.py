@@ -1,9 +1,8 @@
 # ============================================================
-# ✅ JD EXTRACTOR v8.1 — UNIVERSAL SAFE MODE (RENDER FIX)
+# ✅ JD EXTRACTOR v9.0 — UNIVERSAL SAFE MODE (Render-optimized)
 #    • Zero halucinací
-#    • Pouze reálné skills
-#    • Embeddings + LLM SAFE extrakce
-#    • ABSOLUTNÍ cesta k universal_skills (Render fix)
+#    • FAST embeddings (preloaded once)
+#    • 100% stable for Render FREE tier
 # ============================================================
 
 from openai import AsyncOpenAI
@@ -15,95 +14,89 @@ import os
 client = AsyncOpenAI()
 EMBED_MODEL = "text-embedding-3-large"
 
-# ===================================================================
-# ✅ 0) ABSOLUTNÍ CESTA — KLÍČOVÉ PRO RENDER & FASTAPI
-# ===================================================================
+# ------------------------------
+# ✅ Absolute path to skill files
+# ------------------------------
 BASE_DIR = os.path.dirname(__file__)
 SKILLS_DIR = os.path.join(BASE_DIR, "universal_skills")
 
-
-# ===================================================================
-# ✅ 1) LOAD UNIVERSAL SKILL CORPUS (~3000 skills)
-# ===================================================================
+# ------------------------------
+# ✅ Load skill names
+# ------------------------------
 def load_universal_skills():
     skills = []
-    pattern = os.path.join(SKILLS_DIR, "*.json")
-
-    for path in glob.glob(pattern):
-        try:
-            with open(path, "r", encoding="utf-8") as f:
-                skills.extend(json.load(f))
-        except Exception:
-            continue
-
+    for path in glob.glob(os.path.join(SKILLS_DIR, "*.json")):
+        with open(path, "r", encoding="utf-8") as f:
+            skills.extend(json.load(f))
     return list(set(skills))
-
 
 UNIVERSAL_SKILLS = load_universal_skills()
 
+# ------------------------------
+# ✅ PRELOAD ALL SKILL EMBEDDINGS (once at startup)
+# ------------------------------
+_skill_emb_cache = {}
+_embeddings_loaded = False
 
-# ===================================================================
-# ✅ 2) Embedding helper
-# ===================================================================
-async def get_emb(text: str):
-    resp = await client.embeddings.create(
-        model=EMBED_MODEL,
-        input=text
-    )
-    return np.array(resp.data[0].embedding, dtype=np.float32)
+async def preload_skill_embeddings():
+    global _embeddings_loaded
+
+    if _embeddings_loaded:
+        return
+
+    for skill in UNIVERSAL_SKILLS:
+        emb = await client.embeddings.create(
+            model=EMBED_MODEL,
+            input=skill
+        )
+        _skill_emb_cache[skill] = np.array(emb.data[0].embedding, dtype=np.float32)
+
+    _embeddings_loaded = True
 
 
 def cos(a, b):
     return float(np.dot(a, b) / (np.linalg.norm(a) * np.linalg.norm(b)))
 
 
-# ===================================================================
-# ✅ 3) Embedding-based skill extractor
-# ===================================================================
 async def extract_skills_embeddings(jd_text: str, threshold=0.78):
     """
-    Vrací skills z univerzálního korpusu, které významově odpovídají JD.
+    ✅ Ultra fast: JD embedding computed once
+    ✅ Skill embeddings preloaded in memory
     """
-    if not UNIVERSAL_SKILLS:
-        return []
 
-    jd_emb = await get_emb(jd_text)
+    if not _embeddings_loaded:
+        await preload_skill_embeddings()
+
+    # JD embedding
+    resp = await client.embeddings.create(
+        model=EMBED_MODEL,
+        input=jd_text
+    )
+    jd_emb = np.array(resp.data[0].embedding, dtype=np.float32)
+
     matched = []
-
-    for skill in UNIVERSAL_SKILLS:
-        emb = await get_emb(skill)
+    for skill, emb in _skill_emb_cache.items():
         sim = cos(jd_emb, emb)
-
         if sim >= threshold:
             matched.append(skill)
 
     return matched
 
 
-# ===================================================================
-# ✅ 4) LLM SAFE EXTRACTOR
-# ===================================================================
+# ------------------------------
+# ✅ LLM SAFE EXTRACTOR
+# ------------------------------
 SYSTEM_PROMPT = """
 You are an HR job analysis expert.
 
 Rules:
-1) Extract ONLY skills/tools explicitly mentioned in the JD.
-2) Do NOT hallucinate skills not mentioned.
-3) Ignore benefits and HR marketing fluff.
-4) Infer seniority only from wording (junior/senior/zkušený/lead).
-5) If experience not mentioned, return null.
-6) Output ONLY valid JSON.
-
-Return JSON:
-{
-  "role": string | null,
-  "required_skills": [string],
-  "nice_to_have_skills": [string],
-  "seniority": "Senior" | "Mid" | "Junior" | "Trainee" | null,
-  "min_experience": number | null
-}
+1) Extract ONLY skills explicitly mentioned in the JD.
+2) No hallucinations.
+3) Ignore marketing fluff.
+4) Infer seniority only from wording.
+5) If no years mentioned → null.
+6) Return ONLY valid JSON.
 """
-
 
 async def llm_extract_jd(jd_text: str):
     try:
@@ -128,60 +121,43 @@ async def llm_extract_jd(jd_text: str):
         }
 
 
-# ===================================================================
-# ✅ 5) FINAL SAFE JD EXTRACTOR v8.1
-# ===================================================================
+# ------------------------------
+# ✅ FINAL SAFE JD PARSER
+# ------------------------------
 async def extract_structured_jd(jd_text: str) -> dict:
-    """
-    Full pipeline: LLM → Embeddings → Clean → Fallback-safe
-    """
 
     jd_data = await llm_extract_jd(jd_text)
 
-    # 1) LLM skills
+    # LLM skills
     llm_skills = jd_data.get("required_skills") or []
 
-    # 2) Embedding skills
+    # Embeddings skills
     embed_skills = await extract_skills_embeddings(jd_text)
 
-    # 3) Merge + dedupe
+    # Merge + clean
     merged = list({*llm_skills, *embed_skills})
 
-    # 4) Filter junk
-    cleaned = []
-    for skill in merged:
-        s = skill.lower().strip()
+    cleaned = [
+        s for s in merged
+        if len(s.strip()) > 2
+        and "ovat" not in s.lower()
+        and s.lower() not in ["systémy", "nástroje", "operace", "operations"]
+    ]
 
-        if len(s) < 2:
-            continue
-
-        # eliminace starých heuristik
-        if "ovat" in s:
-            continue
-        if s in ["systémy", "nástroje", "operace", "operations", "quality focus"]:
-            continue
-
-        cleaned.append(skill)
-
-    # 5) Fallback (embedding-only)
-    if not cleaned and embed_skills:
+    if not cleaned:
         cleaned = embed_skills[:8]
 
     jd_data["required_skills"] = cleaned
     jd_data["nice_to_have_skills"] = jd_data.get("nice_to_have_skills") or []
 
-    # --- Seniority inference
-    txt = jd_text.lower()
+    # Seniority inference
+    t = jd_text.lower()
     if not jd_data.get("seniority"):
-        if "senior" in txt or "zkušen" in txt or "lead" in txt:
+        if "senior" in t or "zkušen" in t:
             jd_data["seniority"] = "Senior"
-        elif "junior" in txt or "začínaj" in txt:
+        elif "junior" in t or "začínaj" in t:
             jd_data["seniority"] = "Junior"
         else:
             jd_data["seniority"] = "Mid"
-
-    # Experience fallback
-    if jd_data.get("min_experience") is None:
-        jd_data["min_experience"] = None
 
     return jd_data
