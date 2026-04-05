@@ -113,6 +113,7 @@ async def parse_cv(
 
     if jd:
         jd_raw = await extract_structured_jd(jd)
+        print(">>> JD RAW FROM API:", jd_raw)
         jd_clean = sanitize_jd_data(jd_raw)
 
         try:
