@@ -21,8 +21,8 @@ from parser.sanitizers import (
 # CV validity checker
 from parser.cv_validity import is_probably_cv
 
-# ✅ scoring v7 LIGHT — stále se jmenuje compute_matching_v5
-from parser.matching_v5 import compute_matching_v5
+# ✅ scoring v7 LIGHT
+from parser.matching_v5 import compute_matching_v7_5
 
 
 router = APIRouter()
