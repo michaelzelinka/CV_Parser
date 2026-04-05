@@ -32,12 +32,14 @@ async def extract_structured_jd(jd_text: str) -> dict:
         )
         jd = resp.choices[0].message.parsed
 
-    except Exception:
-        return {
-            "required_skills": [],
-            "tech_stack": [],
-            "seniority": None
-        }
+   
+except Exception as e:
+    print("JD_EXTRACTOR_ERROR:", repr(e))
+    return {
+        "required_skills": [],
+        "tech_stack": [],
+        "seniority": None
+    }
 
     if not jd.get("tech_stack"):
         jd["tech_stack"] = []
